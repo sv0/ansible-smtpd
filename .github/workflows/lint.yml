@@ -1,0 +1,14 @@
+---
+- name: lint yaml
+  # You may pin to the exact commit or the version.
+  # uses: BieggerM/yamale-action@f2aaabebb7e5711ce9800354abc0f624eeeaff49
+  uses: BieggerM/yamale-action@v2
+  with:
+    # Directory where the yaml files are located
+    base_dir:
+    # Schema against which is being validated
+    schema:
+    # Filename ending for a specific yaml file to lint
+    filename: # optional
+    # Set true if subdirectories of the dir also need to be linted
+    include_subdir: # optional
