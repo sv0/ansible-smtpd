@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  author: Slavik Svyrydiuk
+  role_name: smtpd
+  namespace: sv0
+  description: Install OpenSMTPD
+  license: MIT
+  company: Svyrydiuk
+  min_ansible_version: 2.14
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: OpenBSD
+      versions:
+        - "7.6"
+
+  galaxy_tags:
+    - mail
+    - smtp
+    - smtpd
+    - opensmtpd
+dependencies: []
