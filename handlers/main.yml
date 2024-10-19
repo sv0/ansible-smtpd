@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+  notify: Restart opensmtpd
+
+- name: Restart opensmtpd
+  service:
+    name: "{{ smtpd_service }}"
+    state: restarted
