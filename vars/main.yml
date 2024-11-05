@@ -1,0 +1,3 @@
+---
+smtpd_sender_blacklist_file: "{{ smtpd_conf_dir }}/sender_blacklist"
+smtpd_sender_whitelist_file: "{{ smtpd_conf_dir }}/sender_whitelist"
