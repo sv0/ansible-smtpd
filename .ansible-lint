@@ -1,0 +1,12 @@
+---
+use_default_rules: true
+parseable: true
+exclude_paths:
+  - .venv
+
+warn_list: []  # empty by default
+# examples of rules
+# - no-free-form
+# - risky-file-permissions
+
+verbosity: 1
