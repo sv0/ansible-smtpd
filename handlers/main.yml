@@ -8,3 +8,8 @@
   service:
     name: "{{ smtpd_service }}"
     state: restarted
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 86400
