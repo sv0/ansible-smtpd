@@ -1,0 +1,129 @@
+# {{ ansible_managed }}
+# commit: {{ lookup('pipe', 'git rev-parse --short HEAD') }}
+# {{ lookup('pipe', 'git log --format=",%%h %%ad %%ae" -1 --date=format:"%%Y/%%m/%%d %%H:%%M" ' + template_fullpath|quote) | default(",UNCOMMITED", True) }}$"
+
+{% if smtpd_enable_tls %}
+pki {{ smtpd_mailname }} cert "/etc/ssl/{{ smtpd_mailname }}.crt"
+pki {{ smtpd_mailname }} key  "/etc/ssl/private/{{ smtpd_mailname }}.key"
+
+smtp ciphers "
+{%- for key_exchange in ['ECDHE', 'DHE'] -%}
+    {%- for certificate_verification in ['ECDSA', 'RSA'] -%}
+        {%- for bulk_encryption in ['AES256-GCM', 'CHACHA20-POLY1305', 'AES128-GCM'] -%}
+            {%- for hashing in ['SHA256', 'SHA384'] -%}
+                {{ key_exchange }}-{{ certificate_verification }}-{{ bulk_encryption }}-{{ hashing }}:
+            {%- endfor -%}
+        {%- endfor -%}
+    {%- endfor -%}
+{%- endfor -%}"
+
+# Debian shit
+# ca cafile cert "/etc/ssl/certs/ca-certificates.crt"
+{% endif %}
+{# end of smtpd_enable_tls #}
+
+# If you edit the file, you have to run "smtpctl update table aliases"
+table aliases       file:{{ smtpd_aliases | default('/etc/aliases', true) }}
+table credentials   file:{{ smtpd_credentials_file }}
+table permfail      db:{{ smtpd_conf_dir }}/permfail.db
+
+{% if smtpd_domain_list %}
+table domains       file:{{ smtpd_domain_table }}
+{% endif %}
+
+{% if smtpd_backup_domain_list %}
+table backup_domains file:{{ smtpd_backup_domain_table }}
+{% endif -%}
+
+table virtual_users file:{{ smtpd_virtual_user_table }}
+table disabled_accounts file:{{ smtpd_disabled_accounts }}
+table sender_whitelist  file:{{ smtpd_sender_whitelist_file }}
+{% if smtpd_sender_blacklist %}
+table sender_blacklist  file:{{ smtpd_sender_blacklist_file }}
+
+filter sender_blacklist \
+        phase mail-from \
+        match mail-from regex <sender_blacklist> \
+        disconnect "550 You were blacklisted. Do not send the fucking SPAM!"
+{% endif %}
+
+filter disabled_accounts \
+        phase rcpt-to \
+        match rcpt-to <disabled_accounts> \
+        disconnect "550 This account was disabled. Feel free to delete it from your fucking SPAM list."
+
+filter no_dyndns \
+        phase connect \
+        match rdns regex { \
+                '.*\.dyn\..*', '.*\.dsl\..*', \
+                '([0-9]{1,3}\.){3}.*', \
+                '([0-9]{1,3}-){3}.*' \
+        } \
+        disconnect "550 I do not accept mail from dynamic IP addresses."
+
+filter no_rdns phase rcpt-to match !rdns disconnect "451 Sending server has no reverse DNS (PTR record)"
+
+# See https://www.debouncer.com/reverse-dns-check?ip={{ smtpd_mailname }}
+filter no_fcrdns \
+        phase rcpt-to \
+        match ! fcrdns \
+        disconnect "451 No Forward Confirmed Reverse DNS. Please contact your e-mail administrator"
+
+filter dkimsign \
+    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -a ed25519 -k {{ smtpd_dkimsign_privkey }}" \
+    user _dkimsign \
+    group _dkimsign
+
+{% for item in smtpd_listen_on %}
+listen on {{ item }} port 25
+    {%- if smtpd_enable_tls %} tls pki {{ smtpd_mailname }} {% endif %}
+    hostname "{{ smtpd_mailname }}" \
+    filter {disabled_accounts, no_dyndns, no_rdns, no_fcrdns{% if smtpd_sender_blacklist %}, sender_blacklist{% endif %} }
+listen on {{ item }} port 587 tls-require pki {{ smtpd_mailname }} auth <credentials> \
+     filter dkimsign
+{% endfor %}
+
+{% if smtpd_backup_domain_list %}
+action "act_backup_domains" relay backup  {# this probably should be deleted {{ smtpd_backup_server | default('svyrydiuk.eu', true) }} #}
+{% endif %}
+
+action "local_mail" {{ smtpd_local_mail | default('mbox') }} alias <aliases>
+
+{% if dovecot_lmtp_socket | default(False) %}
+# Dovecot related settings
+action "act_virtual_user_deliver"  lmtp "{{ dovecot_lmtp_socket }}" rcpt-to virtual <virtual_users>
+# end of Dovecot related settings
+{% else %}
+action "act_virtual_user_deliver" maildir virtual <virtual_users>
+{% endif -%}
+
+action "outbound" relay {% if smtpd_relay_url %} host {{ smtpd_relay_url }} {% endif %}
+
+match from any for any rcpt-to <permfail> reject
+
+{% if smtpd_backup_domain_list %}
+# backup domains
+match from any for domain <backup_domains> action act_backup_domains
+{% endif %}
+
+{% if smtpd_domain_list %}
+match from any for domain <domains> action "act_virtual_user_deliver"
+{% endif -%}
+
+match from local for local action "local_mail"
+
+{% if smtpd_sender_whitelist %}
+match from src <sender_whitelist> for any action "outbound"
+{% endif %}
+
+match \
+    from any \
+    for domain { {{ smtpd_primary_domain | default(inventory_hostname) }}, localhost } \
+    action "local_mail"
+
+match for local action "local_mail"
+
+{% if smtpd_sender_whitelist %}
+match from src <sender_whitelist> for any action "outbound"
+{% endif %}
+match auth from any for any action "outbound"
