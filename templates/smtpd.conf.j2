@@ -69,8 +69,13 @@ filter no_fcrdns \
         match ! fcrdns \
         disconnect "451 No Forward Confirmed Reverse DNS. Please contact your e-mail administrator"
 
-filter dkimsign \
-    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -a ed25519 -k {{ smtpd_dkimsign_privkey }}" \
+filter dkimsign_ed25519 \
+    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -a ed25519-sha256 -k {{ smtpd_dkimsign_ed25519_privkey }}" \
+    user _dkimsign \
+    group _dkimsign
+
+filter dkimsign_rsa \
+    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -k {{ smtpd_dkimsign_rsa_privkey }}" \
     user _dkimsign \
     group _dkimsign
 
@@ -80,7 +85,7 @@ listen on {{ item }} port 25
     hostname "{{ smtpd_mailname }}" \
     filter {disabled_accounts, no_dyndns, no_rdns, no_fcrdns{% if smtpd_sender_blacklist %}, sender_blacklist{% endif %} }
 listen on {{ item }} port 587 tls-require pki {{ smtpd_mailname }} auth <credentials> \
-     filter dkimsign
+     filter {dkimsign_ed25519, dkimsign_rsa}
 {% endfor %}
 
 {% if smtpd_backup_domain_list %}
