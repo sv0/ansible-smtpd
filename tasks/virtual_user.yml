@@ -1,0 +1,27 @@
+---
+- name: Create virtual users table
+  ansible.builtin.file:
+    path: "{{ smtpd_virtual_user_table }}"
+    mode: '0600'
+    state: touch
+  notify: Restart opensmtpd
+  tags:
+    - user
+
+- name: Create real users mail boxes from credentials
+  ansible.builtin.template:
+    src: virtual_users.j2
+    dest: "{{ smtpd_virtual_user_table }}"
+    mode: '0600'
+  notify: Restart opensmtpd
+  tags:
+    - user
+
+- name: Create disabled users list
+  ansible.builtin.template:
+    src: disabled_accounts.j2
+    dest: "{{ smtpd_disabled_accounts }}"
+    mode: '0600'
+  notify: Restart opensmtpd
+  tags:
+    - user
