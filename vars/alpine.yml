@@ -1,0 +1,10 @@
+---
+smtp_packages:
+  - opensmtpd
+  - py3-passlib
+
+smtpd_service: smtpd
+smtpd_user: smtpd
+smtpd_group: smtpd
+
+smtp_owner: smtp
