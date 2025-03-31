@@ -1,0 +1,18 @@
+---
+- name: Create {{ smtpd_dkimsign_dir }}
+  ansible.builtin.file:
+    path: "{{ smtpd_dkimsign_dir }}"
+    state: directory
+    mode: 0755
+
+- name: Copy dkimsign ed25519 private key
+  ansible.builtin.copy:
+    src: "{{ inventory_dir }}/smtp-dkim-ed25519-private.key"
+    dest: "{{ smtpd_dkimsign_ed25519_privkey }}"
+    mode: 0644
+
+- name: Copy dkimsign rsa private key
+  ansible.builtin.copy:
+    src: "{{ inventory_dir }}/smtp-dkim-rsa-private.key"
+    dest: "{{ smtpd_dkimsign_rsa_privkey }}"
+    mode: 0644
