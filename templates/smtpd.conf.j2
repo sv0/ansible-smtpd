@@ -3,8 +3,8 @@
 # {{ lookup('pipe', 'git log --format=",%%h %%ad %%ae" -1 --date=format:"%%Y/%%m/%%d %%H:%%M" ' + template_fullpath|quote) | default(",UNCOMMITED", True) }}$"
 
 {% if smtpd_enable_tls %}
-pki {{ smtpd_mailname }} cert "/etc/ssl/{{ smtpd_mailname }}.crt"
-pki {{ smtpd_mailname }} key  "/etc/ssl/private/{{ smtpd_mailname }}.key"
+pki {{ smtpd_mailname }} cert "{{ smtpd_certificate_dir }}/{{ smtpd_mailname }}.crt"
+pki {{ smtpd_mailname }} key  "{{ smtpd_certificate_dir }}/private/{{ smtpd_mailname }}.key"
 
 smtp ciphers "
 {%- for key_exchange in ['ECDHE', 'DHE'] -%}
@@ -44,7 +44,7 @@ table sender_blacklist  file:{{ smtpd_sender_blacklist_file }}
 filter sender_blacklist \
         phase mail-from \
         match mail-from regex <sender_blacklist> \
-        disconnect "550 You were blacklisted. Do not send the fucking SPAM!"
+        disconnect "550 You were temporary blacklisted. Try to stop sending SPAM."
 {% endif %}
 
 filter disabled_accounts \
@@ -85,7 +85,7 @@ listen on {{ item }} port 25
     hostname "{{ smtpd_mailname }}" \
     filter {disabled_accounts, no_dyndns, no_rdns, no_fcrdns{% if smtpd_sender_blacklist %}, sender_blacklist{% endif %} }
 listen on {{ item }} port 587 tls-require pki {{ smtpd_mailname }} auth <credentials> \
-     filter {dkimsign_ed25519, dkimsign_rsa}
+     filter {dkimsign_rsa}
 {% endfor %}
 
 {% if smtpd_backup_domain_list %}
