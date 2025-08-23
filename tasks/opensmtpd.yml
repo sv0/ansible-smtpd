@@ -1,0 +1,190 @@
+---
+# TODO delete
+# [ERROR]: Task failed: Module failed: Error, could not touch target: [Errno 2] No such file or directory: b'/etc/mail/credentials'
+# - name: Touch /etc/mail/credentials
+#   ansible.builtin.file:
+#     path: /etc/mail/credentials
+#     state: touch
+
+- name: Install smtpd related packages
+  ansible.builtin.package:
+    name: "{{ smtp_packages }}"
+
+- name: Create /etc/systemd/system/opensmtpd.service.d
+  ansible.builtin.file:
+    path: /etc/systemd/system/opensmtpd.service.d
+    state: directory
+    mode: 0755
+  when:
+    - ansible_os_family == "Debian"
+
+- name: Stop smtpd after initial installation of the package  # noqa 503
+  ansible.builtin.service:
+    name: "{{ smtpd_service }}"
+    state: stopped
+  when:
+    - __register_smtpd_apt is defined
+    - __register_smtpd_apt.changed
+
+- name: Collect facts about system services
+  ansible.builtin.service_facts:
+  register: services_state
+  when:
+    - ansible_os_family == "Debian"
+
+  # - name: Debug services_state
+  #   ansible.builtin.debug:
+  #     var: services_state
+
+- name: Add /etc/default/opensmtpd
+  ansible.builtin.copy:
+    content: "CONFIG={{ smtpd_conf_dir }}/smtpd.conf\n"
+    dest: /etc/default/opensmtpd
+  when: ansible_distribution == "Debian"
+  notify:
+    - Reload systemd
+
+- name: Create /etc/systemd/system/opensmtpd.service.d/override.conf
+  ansible.builtin.template:
+    src: opensmtpd.service.override.conf.j2
+    dest: /etc/systemd/system/opensmtpd.service.d/override.conf
+  when: ansible_distribution in ["Debian", "Ubuntu"]
+  notify:
+    - Reload systemd
+
+- name: Debug some smtpd_service
+  ansible.builtin.debug:
+    var: smtpd_service
+
+- name: Enable opensmtpd
+  ansible.builtin.service:
+    name: "{{ smtpd_service }}"
+    enabled: true
+
+- name: Create /etc/mail directory
+  ansible.builtin.file:
+    path: /etc/mail
+    state: directory
+    mode: 0755
+
+# TODO review following 2 tasks
+- name: "Create empty credentials file {{ smtpd_credentials_file }}"
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ smtpd_credentials_file }}"
+    mode: "0664"
+  tags:
+    - conf
+    - user
+
+- name: "Add SMTP users to {{ smtpd_credentials_file }}"
+  ansible.builtin.shell: |
+    echo "{{ item.password }}" | {{ smtpd_smtpctl_executable }} encrypt \
+    | xargs printf "%s:%s\n" "{{ item.username }}" \
+    | tee -a "{{ smtpd_credentials_file }}"
+  with_items: "{{ smtpd_user_list }}"
+  notify: Restart opensmtpd
+  tags:
+    - conf
+    - user
+
+# - name: Add a user to a password file suitable for use by libpam-pwdfile
+#   community.general.htpasswd:
+#     path: "{{ smtpd_credentials_file }}"
+#     name: "{{ item.username }}"
+#     password: "{{ item.password }}"
+#     crypt_scheme: des_crypt
+#   with_items: "{{ smtpd_user_list }}"
+#   notify: Restart opensmtpd
+#   tags: user
+
+- name: Create /etc/mail/sender_whitelist
+  ansible.builtin.template:
+    src: sender_whitelist.j2
+    dest: "{{ smtpd_sender_whitelist_file }}"
+  when:
+    - smtpd_sender_whitelist is defined
+    - smtpd_sender_whitelist | length > 0
+  notify: Restart opensmtpd
+
+- name: Create /etc/mail/sender_blacklist
+  ansible.builtin.template:
+    src: sender_blacklist.j2
+    dest: "{{ smtpd_sender_blacklist_file }}"
+  when: smtpd_sender_blacklist is defined
+  # notify: Restart opensmtpd
+  tags:
+    - blacklist
+    - conf
+
+- name: Create /etc/mail/backup_domain
+  ansible.builtin.template:
+    src: backup_domains.j2
+    dest: "{{ smtpd_backup_domain_table }}"
+  when: smtpd_sender_whitelist is defined
+  # notify: Restart opensmtpd
+
+- name: "Create {{ smtpd_domain_table }}"
+  ansible.builtin.template:
+    src: domains.j2
+    dest: "{{ smtpd_domain_table }}"
+  when:
+    - smtpd_domain_list is defined
+    - smtpd_domain_list | length > 0
+
+- name: Create file {{ smtpd_permfail_file }}
+  ansible.builtin.copy:
+    content: "nonexistent@example.com"
+    dest: "{{ smtpd_permfail_file }}"
+    force: false
+
+- name: Create table {{ smtpd_permfail_table }}
+  ansible.builtin.command:
+    cmd: "{{ smtpd_makemap_bin }} -t set {{ smtpd_permfail_file }}"
+    creates: "{{ smtpd_permfail_table }}"
+
+- name: Delete /etc/smtpd.conf
+  ansible.builtin.file:
+    dest: "/etc/smtpd.conf"
+    state: absent
+  when:
+    - smtpd_conf_file is defined
+    - smtpd_conf_file != '/etc/smtpd.conf'
+
+- name: Delete /etc/smtpd dir on Alpine
+  ansible.builtin.file:
+    dest: "/etc/smtpd"
+    state: absent
+
+- name: Create symlink /etc/smtpd > /etc/mail dir on Alpine
+  ansible.builtin.file:
+    src: /etc/mail
+    dest: /etc/smtpd
+    state: link
+
+- name: "Create {{ smtpd_conf_file }}"
+  ansible.builtin.template:
+    src: "{{ smtpd_conf_template }}"
+    dest: "{{ smtpd_conf_file }}"
+  notify: Restart opensmtpd
+  tags: conf
+
+- name: Validate smtpd.conf
+  ansible.builtin.command:
+    "smtpd -n -f {{ smtpd_conf_file }}"
+  failed_when: false
+  changed_when: false
+  tags: conf
+
+- name: Create /etc/mailname file
+  copy:
+    content: "{{ smtpd_mailname }}"
+    dest: "/etc/mailname"
+
+- name: Restart opensmtpd
+  service:
+    name: "{{ smtpd_service }}"
+    state: restarted
+  when:
+    - services_state is defined
+    - services_state.get(smtpd_service, {}).get('state') == 'running'
