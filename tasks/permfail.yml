@@ -1,0 +1,13 @@
+---
+- name: Create permfail.sh script
+  ansible.builtin.copy:
+    src: "files/permfail.sh"
+    dest: "/usr/local/bin/permfail.sh"
+    mode: "0755"
+
+- name: Create permfail cron job that runs every 10 minutes
+  ansible.builtin.cron:
+    name: "parse PermFail email addresses"
+    minute: "*/10"
+    hour: "*"
+    job: "/bin/sh /usr/local/bin/permfail.sh > /dev/null"
