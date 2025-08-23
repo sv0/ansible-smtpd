@@ -1,0 +1,9 @@
+# real mail boxes in /home/vmail
+{% for item in smtpd_user_list %}
+{{ item.username }} vmail
+{% endfor %}
+
+# virtual mail addresses (aliases)
+{% for item in smtpd_virtual_user_list %}
+{{ item.alias }} {{ item.to }}
+{% endfor %}

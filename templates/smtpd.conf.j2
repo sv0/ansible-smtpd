@@ -17,7 +17,7 @@ smtp ciphers "
     {%- endfor -%}
 {%- endfor -%}"
 
-# Debian shit
+# Debian
 # ca cafile cert "/etc/ssl/certs/ca-certificates.crt"
 {% endif %}
 {# end of smtpd_enable_tls #}
@@ -69,11 +69,6 @@ filter no_fcrdns \
         match ! fcrdns \
         disconnect "451 No Forward Confirmed Reverse DNS. Please contact your e-mail administrator"
 
-filter dkimsign_ed25519 \
-    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -a ed25519-sha256 -k {{ smtpd_dkimsign_ed25519_privkey }}" \
-    user _dkimsign \
-    group _dkimsign
-
 filter dkimsign_rsa \
     proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -k {{ smtpd_dkimsign_rsa_privkey }}" \
     user _dkimsign \
@@ -89,7 +84,11 @@ listen on {{ item }} port 587 tls-require pki {{ smtpd_mailname }} auth <credent
 {% endfor %}
 
 {% if smtpd_backup_domain_list %}
-action "act_backup_domains" relay backup  {# this probably should be deleted {{ smtpd_backup_server | default('svyrydiuk.eu', true) }} #}
+action "act_backup_domains" relay
+    {%- if smtpd_backup_server %} host {{ smtpd_backup_server }}
+    {% else %}
+    backup
+    {% endif %}
 {% endif %}
 
 action "local_mail" {{ smtpd_local_mail | default('mbox') }} alias <aliases>
