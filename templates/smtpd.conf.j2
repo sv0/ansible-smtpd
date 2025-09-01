@@ -70,7 +70,7 @@ filter no_fcrdns \
         disconnect "451 No Forward Confirmed Reverse DNS. Please contact your e-mail administrator"
 
 filter dkimsign_rsa \
-    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} -s mail -k {{ smtpd_dkimsign_rsa_privkey }}" \
+    proc-exec "filter-dkimsign -d {{ smtpd_mailname }} {% for domain in smtpd_domain_list %} -d {{ domain }} {% endfor %} -s mail -k {{ smtpd_dkimsign_rsa_privkey }}" \
     user _dkimsign \
     group _dkimsign
 
